@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AMP Market Opportunity Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=GFS+Didot&family=Nunito+Sans:opsz,wght@6..12,300;6..12,400;6..12,600;6..12,700&display=swap" rel="stylesheet">
+  <style>
+    /* AMP Intelligence Design System */
+    :root {
+      --navy: #041E42;
+      --navy-mid: #0a2d5e;
+      --gold: #B9975B;
+      --gold-light: #CDB5A7;
+      --blush: #CDB5A7;
+      --gold-muted: #9a7d4a;
+      --cream: #FAF8F7;
+      --taupe: #E4D5D3;
+      --light: #f0eae9;
+      --gray: #948794;
+      --mauve: #948794;
+      --dark: #2a1f28;
+      --white: #FFFFFF;
+      --red: #C0392B;
+      --green: #1A6B3C;
+      --rose: #E4D5D3;
+      --serif: 'GFS Didot', Didot, Georgia, serif;
+      --sans: 'Nunito Sans', 'Avenir Next', Avenir, system-ui, sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans);
+      background: var(--cream); color: var(--dark); overflow: hidden;
+      font-size: 13px; font-weight: 400;
+    }
+
+    #map { width: 100vw; height: 100vh; background: #0f172a; }
+
+    /* Top bar — navy brand bar */
+    .top-bar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: var(--navy);
+      border-bottom: 1px solid var(--navy-mid);
+      padding: 8px 20px;
+      display: flex; align-items: center; gap: 14px;
+      box-shadow: 0 2px 12px rgba(4, 30, 66, 0.25);
+      flex-wrap: wrap;
+      min-height: 48px;
+    }
+    .top-bar .logo {
+      font-family: var(--serif);
+      font-size: 22px; font-weight: 400; color: var(--gold);
+      letter-spacing: 4px; white-space: nowrap;
+    }
+    .top-bar .logo span {
+      color: var(--white); font-weight: 400; font-size: 10px;
+      font-family: var(--sans); letter-spacing: 2px;
+      text-transform: uppercase; margin-left: 6px;
+    }
+    .top-bar .divider { width: 1px; height: 24px; background: rgba(185, 151, 91, 0.3); }
+    .zoom-indicator {
+      background: var(--navy-mid); border: 1px solid rgba(185, 151, 91, 0.25); border-radius: 5px;
+      padding: 5px 12px; font-size: 10px; color: var(--gold-light);
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
+    }
+    .zoom-indicator .level {
+      color: var(--gold); font-weight: 700; font-size: 11px;
+      letter-spacing: 1px;
+    }
+
+    /* Nav-bar control groups */
+    .data-toggle {
+      display: flex; gap: 0; background: var(--navy-mid);
+      border: 1px solid rgba(185, 151, 91, 0.3);
+      border-radius: 5px; padding: 2px; flex-shrink: 0;
+    }
+    .toggle-btn {
+      padding: 5px 12px; border-radius: 4px; border: none; cursor: pointer;
+      font-size: 10px; font-weight: 700; font-family: var(--sans);
+      color: var(--white); background: transparent; transition: all 0.15s;
+      white-space: nowrap; letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .toggle-btn.active { background: var(--gold); color: var(--navy); }
+    .toggle-btn:hover:not(.active) { background: rgba(185, 151, 91, 0.2); color: var(--gold-light); }
+
+    /* AMP Locations button + Target button (nav-bar CTAs) */
+    .loc-toggle-wrap { position: relative; display: flex; align-items: center; gap: 6px; }
+    .loc-btn, .target-btn {
+      background: transparent; border: 1px solid rgba(185, 151, 91, 0.35); border-radius: 5px;
+      padding: 6px 13px; color: var(--white); font-family: var(--sans);
+      font-size: 10px; font-weight: 700; cursor: pointer; display: flex;
+      align-items: center; gap: 6px; white-space: nowrap; transition: all 0.15s;
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .loc-btn:hover, .target-btn:hover { background: rgba(185, 151, 91, 0.18); border-color: var(--gold); }
+    .loc-btn.on { background: var(--gold); color: var(--navy); border-color: var(--gold); }
+    .target-btn.on { background: var(--gold); color: var(--navy); border-color: var(--gold); }
+    .loc-btn .pin { font-size: 13px; }
+
+    .loc-filter-btn {
+      background: transparent; border: 1px solid rgba(185, 151, 91, 0.35); border-radius: 5px;
+      padding: 6px 11px; color: var(--white); font-size: 10px; font-weight: 700;
+      cursor: pointer; white-space: nowrap; font-family: var(--sans);
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .loc-filter-btn:hover { background: rgba(185, 151, 91, 0.18); border-color: var(--gold); }
+
+    /* Floating panels — white card style */
+    .loc-panel, .target-panel, .info-panel {
+      background: var(--white);
+      border: 1px solid var(--taupe);
+      border-radius: 10px;
+      box-shadow: 0 4px 24px rgba(4, 30, 66, 0.18);
+      color: var(--dark);
+    }
+
+    .loc-panel {
+      position: fixed; top: 64px; left: 24px; z-index: 1100;
+      padding: 0; width: 300px; max-height: calc(100vh - 100px);
+      overflow: hidden;
+      display: none; flex-direction: column;
+    }
+    .loc-panel.visible { display: flex; }
+    .loc-panel-header {
+      padding: 14px 18px; border-bottom: 1px solid var(--taupe);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .loc-panel-header h4 {
+      font-family: var(--serif); font-size: 18px; font-weight: 400;
+      color: var(--navy);
+    }
+    .loc-panel-close, .info-close {
+      background: none; border: none; color: var(--mauve); cursor: pointer;
+      font-size: 20px; line-height: 1; padding: 2px 6px; border-radius: 3px;
+    }
+    .loc-panel-close:hover, .info-close:hover { color: var(--navy); background: var(--light); }
+
+    /* Tabs within panels */
+    .loc-tabs {
+      display: flex; border-bottom: 1px solid var(--taupe); background: var(--cream);
+    }
+    .loc-tab {
+      flex: 1; padding: 10px 8px; background: transparent; border: none; color: var(--mauve);
+      font-family: var(--sans); font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1.5px; cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    .loc-tab.active { color: var(--navy); border-bottom-color: var(--gold); }
+    .loc-tab:hover:not(.active) { color: var(--navy); }
+
+    .loc-tab-actions {
+      padding: 8px 16px; border-bottom: 1px solid var(--taupe);
+      display: flex; gap: 8px; font-size: 10px;
+    }
+    .loc-mini-btn {
+      background: transparent; border: 1px solid var(--taupe); color: var(--navy);
+      border-radius: 4px; padding: 4px 9px; font-size: 9px; font-weight: 700;
+      cursor: pointer; font-family: var(--sans); letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .loc-mini-btn:hover { border-color: var(--gold); color: var(--gold-muted); background: var(--light); }
+
+    .loc-list { flex: 1; overflow-y: auto; padding: 6px 0; scrollbar-width: thin; }
+    .loc-item {
+      display: flex; align-items: center; gap: 10px; padding: 7px 16px;
+      cursor: pointer; font-size: 12px; color: var(--dark);
+    }
+    .loc-item:hover { background: var(--cream); }
+    .loc-item input[type="checkbox"] { accent-color: var(--gold); cursor: pointer; }
+    .loc-item .swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .loc-item .count { margin-left: auto; color: var(--mauve); font-size: 10px; font-weight: 600; }
+    .loc-tab-body { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+    .loc-tab-body.active { display: flex; }
+
+    /* Pushpin icon containers */
+    .amp-pin-icon, .target-pin-icon { background: transparent; border: none; }
+
+    /* Target panel */
+    .target-panel {
+      position: fixed; top: 64px; right: 24px; z-index: 1200;
+      padding: 0; width: 380px;
+      max-height: calc(100vh - 100px);
+      overflow: hidden;
+      display: none; flex-direction: column;
+    }
+    .target-panel.visible { display: flex; }
+    .target-panel-header {
+      padding: 14px 18px; border-bottom: 1px solid var(--taupe);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .target-panel-header h4 {
+      font-family: var(--serif); font-size: 18px; font-weight: 400;
+      color: var(--navy);
+    }
+    .target-panel-body {
+      padding: 14px 18px; display: flex; flex-direction: column; gap: 10px;
+      overflow-y: auto;
+    }
+    .target-panel textarea {
+      background: var(--cream); border: 1.5px solid var(--taupe); border-radius: 6px;
+      padding: 10px 12px; color: var(--navy); font-family: var(--sans);
+      font-size: 13px; resize: vertical; min-height: 60px;
+      width: 100%; outline: none; transition: border-color 0.15s;
+    }
+    .target-panel textarea:focus { border-color: var(--gold); }
+    .target-panel-hint {
+      font-size: 11px; color: var(--mauve); line-height: 1.5;
+      padding-left: 2px;
+    }
+    .target-btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* CTA button - gold */
+    .target-action-btn {
+      background: var(--gold); border: none; border-radius: 5px;
+      padding: 7px 13px; color: var(--navy); font-size: 10px; font-weight: 700;
+      cursor: pointer; font-family: var(--sans); letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .target-action-btn:hover { background: var(--gold-muted); color: var(--white); }
+    .target-action-btn.secondary {
+      background: transparent; border: 1.5px solid var(--taupe); color: var(--navy);
+    }
+    .target-action-btn.secondary:hover { border-color: var(--gold); color: var(--gold-muted); background: var(--light); }
+    .target-action-btn.drop.on { background: var(--navy); color: var(--gold); border-color: var(--navy); }
+
+    .target-list { display: flex; flex-direction: column; gap: 4px; }
+    .target-list-item {
+      display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+      background: var(--cream); border: 1px solid var(--taupe); border-radius: 5px;
+      font-size: 12px; color: var(--dark);
+    }
+    .target-list-item .tname { flex: 1; font-weight: 600; color: var(--navy); }
+    .target-list-item .tzip { color: var(--mauve); font-size: 10px; font-weight: 600; }
+    .target-list-item .tdel {
+      background: transparent; border: none; color: var(--mauve); cursor: pointer;
+      font-size: 16px; line-height: 1; padding: 0 4px; border-radius: 3px;
+    }
+    .target-list-item .tdel:hover { color: var(--red); background: var(--light); }
+
+    .target-status {
+      font-size: 11px; color: var(--mauve); font-style: italic; margin-top: 4px;
+    }
+    .target-status.error { color: var(--red); font-style: normal; font-weight: 600; }
+    .target-status.success { color: var(--green); font-style: normal; font-weight: 600; }
+
+    /* Open Comparison Table button — navy solid */
+    .rank-table-btn {
+      background: var(--navy); border: none; border-radius: 5px;
+      padding: 10px 16px; color: var(--gold); font-size: 11px; font-weight: 700;
+      cursor: pointer; font-family: var(--sans); margin-top: 4px;
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+    .rank-table-btn:hover { background: var(--navy-mid); color: var(--white); }
+    .rank-table-btn:disabled {
+      background: var(--light); color: var(--mauve); cursor: not-allowed;
+    }
+
+    /* Ranking modal */
+    .rank-modal {
+      position: fixed; inset: 0; z-index: 3000;
+      background: rgba(4, 30, 66, 0.55);
+      display: none; align-items: flex-start; justify-content: center;
+      padding: 40px 20px; overflow-y: auto;
+    }
+    .rank-modal.visible { display: flex; }
+    .rank-modal-box {
+      background: var(--white); border: 1px solid var(--taupe); border-radius: 10px;
+      width: 100%; max-width: 1400px; display: flex; flex-direction: column;
+      max-height: calc(100vh - 80px); overflow: hidden;
+      box-shadow: 0 8px 32px rgba(4, 30, 66, 0.25);
+    }
+    .rank-modal-header {
+      padding: 16px 22px; border-bottom: 1px solid var(--taupe);
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      flex-wrap: wrap;
+      background: var(--white);
+    }
+    .rank-modal-header h3 {
+      font-family: var(--serif); font-size: 22px; font-weight: 400;
+      color: var(--navy); line-height: 1.2;
+    }
+    .rank-modal-header .sub { font-size: 12px; color: var(--mauve); margin-top: 2px; }
+    .rank-modal-close {
+      background: none; border: none; color: var(--mauve); font-size: 24px; cursor: pointer;
+      line-height: 1; padding: 2px 8px; border-radius: 3px;
+    }
+    .rank-modal-close:hover { color: var(--navy); background: var(--light); }
+
+    .rank-controls {
+      display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+      padding: 12px 22px; border-bottom: 1px solid var(--taupe); background: var(--cream);
+    }
+    .rank-control-group {
+      display: flex; align-items: center; gap: 8px; font-size: 10px;
+      color: var(--navy); font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .rank-select {
+      background: var(--white); border: 1.5px solid var(--taupe); color: var(--navy);
+      border-radius: 5px; padding: 6px 10px; font-size: 12px;
+      font-family: var(--sans); min-width: 140px; max-height: 150px;
+    }
+
+    .rank-multi {
+      display: flex; flex-direction: column; gap: 4px;
+      background: var(--white); border: 1.5px solid var(--taupe); border-radius: 6px;
+      padding: 6px; min-width: 200px;
+    }
+    .rank-multi-actions {
+      display: flex; gap: 4px; align-items: center;
+      padding: 0 3px 5px; border-bottom: 1px solid var(--taupe);
+    }
+    .rank-multi-count {
+      margin-left: auto; font-size: 10px; color: var(--mauve); font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .rank-multi-list {
+      display: flex; flex-direction: column; gap: 1px;
+      max-height: 130px; overflow-y: auto; padding: 3px 2px;
+      scrollbar-width: thin; scrollbar-color: var(--taupe) transparent;
+    }
+    .rank-multi-item {
+      display: flex; align-items: center; gap: 7px; padding: 4px 6px;
+      cursor: pointer; font-size: 12px; color: var(--dark); border-radius: 3px;
+      user-select: none; font-weight: 400; text-transform: none; letter-spacing: 0;
+    }
+    .rank-multi-item:hover { background: var(--cream); }
+    .rank-multi-item input[type="checkbox"] { accent-color: var(--gold); cursor: pointer; margin: 0; }
+    .rank-multi-item .rcount { margin-left: auto; color: var(--mauve); font-size: 10px; font-weight: 600; }
+
+    .rank-source-toggle {
+      display: flex; background: var(--white); border: 1.5px solid var(--taupe);
+      border-radius: 5px; padding: 2px;
+    }
+    .rank-source-btn {
+      padding: 5px 11px; border: none; background: transparent; cursor: pointer;
+      color: var(--navy); border-radius: 3px; font-family: var(--sans);
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .rank-source-btn.active { background: var(--gold); color: var(--navy); }
+    .rank-source-btn:hover:not(.active) { background: var(--light); }
+
+    /* Ranking table — navy header, cream/white alternating rows */
+    .rank-table-wrap { flex: 1; overflow: auto; background: var(--white); }
+    .rank-table {
+      width: 100%; border-collapse: collapse; font-size: 12px;
+      font-family: var(--sans);
+    }
+    .rank-table th {
+      position: sticky; top: 0; z-index: 2;
+      background: var(--navy); color: var(--blush);
+      padding: 12px 14px;
+      text-align: left; font-weight: 600; border-bottom: 2px solid var(--gold);
+      white-space: nowrap; cursor: pointer; user-select: none;
+      text-transform: uppercase; letter-spacing: 2px; font-size: 9px;
+    }
+    .rank-table th:hover { color: var(--white); background: var(--navy-mid); }
+    .rank-table th.sort-asc::after  { content: ' \25B2'; color: var(--gold); font-size: 9px; }
+    .rank-table th.sort-desc::after { content: ' \25BC'; color: var(--gold); font-size: 9px; }
+
+    .rank-table tbody tr { background: var(--white); }
+    .rank-table tbody tr:nth-child(even) { background: var(--cream); }
+    .rank-table td {
+      padding: 10px 14px; color: var(--dark); border-bottom: 1px solid var(--taupe);
+    }
+
+    .rank-cell-rank { font-weight: 700; color: var(--navy); }
+    .rank-cell-name { font-weight: 600; color: var(--navy); }
+    .rank-cell-opp  { color: var(--gold-muted); font-weight: 700; }
+
+    .rank-table tr.target-row,
+    .rank-table tr.target-row:nth-child(even) {
+      background: rgba(185, 151, 91, 0.12);
+    }
+    .rank-table tr.target-row td {
+      color: var(--dark); font-weight: 600;
+    }
+    .rank-table tr.target-row td:first-child {
+      border-left: 3px solid var(--gold);
+    }
+    .rank-table tr:hover { background: var(--light) !important; }
+    .rank-table tr.target-row:hover { background: rgba(185, 151, 91, 0.22) !important; }
+
+    .rank-chip {
+      display: inline-block; padding: 3px 9px; border-radius: 5px;
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; font-family: var(--sans);
+    }
+    .rank-chip.target { background: var(--gold); color: var(--navy); }
+    .rank-chip.amp    { background: var(--taupe); color: var(--navy); }
+
+    .rank-empty {
+      padding: 40px 20px; text-align: center; color: var(--mauve); font-size: 13px;
+      font-style: italic;
+    }
+
+    /* Metric selector (top-bar right) */
+    .metric-selector {
+      display: flex; gap: 2px; background: var(--navy-mid);
+      border: 1px solid rgba(185, 151, 91, 0.3);
+      border-radius: 5px; padding: 2px; margin-left: auto;
+    }
+    .metric-btn {
+      padding: 5px 11px; border-radius: 4px; border: none; cursor: pointer;
+      font-size: 10px; font-weight: 700; font-family: var(--sans);
+      color: var(--white); background: transparent; transition: all 0.15s;
+      white-space: nowrap; letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .metric-btn.active { background: var(--gold); color: var(--navy); }
+    .metric-btn:hover:not(.active) { background: rgba(185, 151, 91, 0.2); color: var(--gold-light); }
+
+    /* Legend — white card */
+    .legend {
+      position: fixed; bottom: 24px; left: 24px; z-index: 1000;
+      background: var(--white); border: 1px solid var(--taupe);
+      border-radius: 10px; padding: 16px 20px;
+      min-width: 230px;
+      box-shadow: 0 4px 16px rgba(4, 30, 66, 0.15);
+    }
+    .legend h4 {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 2px;
+      color: var(--blush); margin-bottom: 12px; font-weight: 600;
+    }
+    .legend-items { display: flex; flex-direction: column; gap: 7px; }
+    .legend-item {
+      display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dark);
+    }
+    .legend-swatch {
+      width: 26px; height: 14px; border-radius: 3px; flex-shrink: 0;
+      border: 1px solid rgba(4, 30, 66, 0.12);
+    }
+    .legend .subtitle { font-size: 11px; color: var(--mauve); margin-top: 10px; font-style: italic; }
+
+    /* Info panel — white card */
+    .info-panel {
+      position: fixed; top: 64px; right: 24px; z-index: 1000;
+      padding: 0; width: 380px; max-height: calc(100vh - 100px);
+      overflow-y: auto;
+      display: none;
+      scrollbar-width: thin; scrollbar-color: var(--taupe) transparent;
+    }
+    .info-panel.visible { display: block; }
+    .info-header {
+      padding: 16px 22px; border-bottom: 1px solid var(--taupe);
+      display: flex; justify-content: space-between; align-items: flex-start;
+      position: sticky; top: 0; background: var(--white); z-index: 1;
+    }
+    .info-header h3 {
+      font-family: var(--serif); font-size: 20px; font-weight: 400;
+      color: var(--navy); line-height: 1.2;
+    }
+    .info-header .subtitle { font-size: 12px; color: var(--mauve); margin-top: 4px; }
+    .info-body { padding: 16px 22px; }
+    .info-section { margin-bottom: 18px; }
+    .info-section h5 {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--gold); margin-bottom: 10px; font-weight: 700;
+    }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .info-stat {
+      background: var(--cream); border: 1px solid var(--taupe);
+      border-radius: 6px; padding: 10px 12px;
+    }
+    .info-stat .label {
+      font-size: 9px; color: var(--blush); margin-bottom: 3px;
+      text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700;
+    }
+    .info-stat .value {
+      font-family: var(--serif); font-size: 18px; font-weight: 400;
+      color: var(--navy);
+    }
+    .info-stat .value.highlight { color: var(--gold); }
+    .info-stat .value.good { color: var(--green); }
+    .info-stat .value.warn { color: var(--gold-muted); }
+    .info-stat.full { grid-column: 1 / -1; }
+
+    /* Loading overlay — navy with gold */
+    .loading {
+      position: fixed; inset: 0; z-index: 2000;
+      background: var(--navy);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 18px;
+    }
+    .loading.hidden { display: none; }
+    .spinner {
+      width: 48px; height: 48px; border: 3px solid rgba(185, 151, 91, 0.25);
+      border-top-color: var(--gold); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text {
+      color: var(--cream); font-size: 14px;
+      font-family: var(--serif); letter-spacing: 1px;
+    }
+    .loading-progress {
+      color: var(--gold); font-size: 11px; font-weight: 600;
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+
+    /* Search */
+    .search-container { position: relative; }
+    .search-input {
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(185, 151, 91, 0.35); border-radius: 5px;
+      padding: 7px 14px 7px 32px; color: var(--white); font-size: 12px;
+      font-family: var(--sans); width: 260px; outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-input:focus { border-color: var(--gold); background: rgba(255,255,255,0.14); }
+    .search-input::placeholder { color: rgba(205, 181, 167, 0.6); }
+    .search-icon {
+      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+      color: var(--gold-light); font-size: 13px;
+    }
+    .search-results {
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: var(--white); border: 1px solid var(--taupe); border-radius: 6px;
+      margin-top: 4px; max-height: 300px; overflow-y: auto; display: none;
+      box-shadow: 0 4px 16px rgba(4, 30, 66, 0.2);
+    }
+    .search-results.visible { display: block; }
+    .search-result {
+      padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--taupe);
+      font-size: 12px; color: var(--dark);
+    }
+    .search-result:hover { background: var(--cream); }
+    .search-result .name { color: var(--navy); font-weight: 600; }
+    .search-result .meta { color: var(--mauve); font-size: 11px; margin-top: 2px; }
+
+    /* Hover tooltip — navy with cream text + gold values */
+    #hover-tooltip {
+      position: fixed; z-index: 2000; pointer-events: none;
+      background: var(--navy);
+      border: 1px solid var(--gold-muted);
+      border-radius: 6px;
+      padding: 10px 14px;
+      color: var(--cream);
+      font-family: var(--sans);
+      font-size: 12px;
+      box-shadow: 0 6px 20px rgba(4, 30, 66, 0.4);
+      display: none;
+      max-width: 320px;
+      transform: translate(12px, -50%);
+    }
+    #hover-tooltip.visible { display: block; }
+    #hover-tooltip .tt-title {
+      font-family: var(--serif); font-weight: 400; font-size: 14px;
+      color: var(--white); margin-bottom: 6px;
+    }
+    #hover-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+    #hover-tooltip .tt-label {
+      color: var(--blush); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 1px; font-weight: 600;
+    }
+    #hover-tooltip .tt-value { font-weight: 700; color: var(--gold); }
+
+    /* Leaflet tooltip (for ZIP markers) */
+    .map-tooltip {
+      background: var(--navy) !important;
+      border: 1px solid var(--gold-muted) !important;
+      border-radius: 6px !important;
+      padding: 10px 14px !important;
+      color: var(--cream) !important;
+      font-family: var(--sans) !important;
+      font-size: 12px !important;
+      box-shadow: 0 6px 20px rgba(4, 30, 66, 0.4) !important;
+    }
+    .map-tooltip .tt-title {
+      font-family: var(--serif) !important;
+      font-weight: 400 !important; font-size: 14px !important;
+      color: var(--white) !important; margin-bottom: 6px !important;
+    }
+    .map-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+    .map-tooltip .tt-label {
+      color: var(--blush) !important; font-size: 10px !important;
+      text-transform: uppercase !important; letter-spacing: 1px !important;
+      font-weight: 600 !important;
+    }
+    .map-tooltip .tt-value { font-weight: 700 !important; color: var(--gold) !important; }
+
+    /* Leaflet controls */
+    .leaflet-control-zoom {
+      border: 1px solid var(--taupe) !important; border-radius: 6px !important;
+      overflow: hidden; box-shadow: 0 2px 8px rgba(4, 30, 66, 0.15);
+    }
+    .leaflet-control-zoom a {
+      background: var(--white) !important; color: var(--navy) !important;
+      border-bottom: 1px solid var(--taupe) !important;
+      width: 34px !important; height: 34px !important; line-height: 34px !important;
+      font-size: 18px !important; font-weight: 600 !important;
+    }
+    .leaflet-control-zoom a:hover { background: var(--gold) !important; color: var(--navy) !important; }
+
+    /* Subtle scrollbar for light panels */
+    .loc-list::-webkit-scrollbar,
+    .rank-multi-list::-webkit-scrollbar,
+    .rank-table-wrap::-webkit-scrollbar,
+    .target-panel-body::-webkit-scrollbar,
+    .info-panel::-webkit-scrollbar { width: 8px; height: 8px; }
+    .loc-list::-webkit-scrollbar-thumb,
+    .rank-multi-list::-webkit-scrollbar-thumb,
+    .rank-table-wrap::-webkit-scrollbar-thumb,
+    .target-panel-body::-webkit-scrollbar-thumb,
+    .info-panel::-webkit-scrollbar-thumb { background: var(--taupe); border-radius: 4px; }
+    .loc-list::-webkit-scrollbar-thumb:hover,
+    .rank-multi-list::-webkit-scrollbar-thumb:hover,
+    .rank-table-wrap::-webkit-scrollbar-thumb:hover,
+    .target-panel-body::-webkit-scrollbar-thumb:hover,
+    .info-panel::-webkit-scrollbar-thumb:hover { background: var(--gold-muted); }
+  </style>
+</head>
+<body>
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading AMP Market Opportunity Map</div>
+    <div class="loading-progress" id="loading-progress">Initializing...</div>
+  </div>
+
+  <div class="top-bar">
+    <div class="logo">AMP <span>Market Opportunity Map</span></div>
+    <div class="divider"></div>
+    <div class="zoom-indicator">
+      View: <span class="level" id="view-level">States</span>
+    </div>
+    <div class="search-container">
+      <span class="search-icon">&#128269;</span>
+      <input type="text" class="search-input" id="search" placeholder="Search ZIP, county, or state...">
+      <div class="search-results" id="search-results"></div>
+    </div>
+    <div class="data-toggle" id="data-toggle">
+      <button class="toggle-btn active" data-source="census">Census / Allergan</button>
+      <button class="toggle-btn" data-source="buxton">Buxton Data</button>
+    </div>
+    <div class="loc-toggle-wrap">
+      <button class="loc-btn" id="loc-toggle-btn" title="Show AMP locations"><span class="pin">&#128205;</span> AMP Locations</button>
+      <button class="loc-filter-btn" id="loc-filter-btn">Filter</button>
+    </div>
+    <button class="target-btn" id="target-toggle-btn" title="Target properties benchmark mode"><span>&#127919;</span> Targets</button>
+    <div class="metric-selector">
+      <button class="metric-btn active" data-metric="opportunity">Opportunity Score</button>
+      <button class="metric-btn" data-metric="registeredPatients">Registered Patients</button>
+      <button class="metric-btn" data-metric="medspas">MedSpas</button>
+      <button class="metric-btn" data-metric="femalePop">Female Pop 25-65 (75k+)</button>
+      <button class="metric-btn" data-metric="penetration">Market Penetration</button>
+      <button class="metric-btn" data-metric="density">Pop Density</button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+  <div id="hover-tooltip"></div>
+
+  <div class="loc-panel" id="loc-panel">
+    <div class="loc-panel-header">
+      <h4>AMP Locations — Filter</h4>
+      <button class="loc-panel-close" id="loc-panel-close">&times;</button>
+    </div>
+    <div class="loc-tabs">
+      <button class="loc-tab active" data-tab="brands">Brands</button>
+      <button class="loc-tab" data-tab="classifications">Classifications</button>
+    </div>
+    <div class="loc-tab-body active" id="loc-tab-brands">
+      <div class="loc-tab-actions">
+        <button class="loc-mini-btn" data-group="brands" data-action="all">Select All</button>
+        <button class="loc-mini-btn" data-group="brands" data-action="none">Clear</button>
+      </div>
+      <div class="loc-list" id="loc-list-brands"></div>
+    </div>
+    <div class="loc-tab-body" id="loc-tab-classifications">
+      <div class="loc-tab-actions">
+        <button class="loc-mini-btn" data-group="classifications" data-action="all">Select All</button>
+        <button class="loc-mini-btn" data-group="classifications" data-action="none">Clear</button>
+      </div>
+      <div class="loc-list" id="loc-list-classifications"></div>
+    </div>
+  </div>
+
+  <!-- Target properties panel -->
+  <div class="target-panel" id="target-panel">
+    <div class="target-panel-header">
+      <h4>Target Properties</h4>
+      <button class="loc-panel-close" id="target-panel-close">&times;</button>
+    </div>
+    <div class="target-panel-body">
+      <div class="target-panel-hint">
+        Paste addresses or 5-digit ZIPs, one per line. You can also drop pins directly on the map.
+      </div>
+      <textarea id="target-input" placeholder="Input address here"></textarea>
+      <div class="target-btn-row">
+        <button class="target-action-btn" id="target-add-btn">Add</button>
+        <button class="target-action-btn drop secondary" id="target-drop-btn">&#128205; Drop on Map: OFF</button>
+        <button class="target-action-btn secondary" id="target-clear-btn" style="margin-left:auto;">Clear All</button>
+      </div>
+      <div class="target-status" id="target-status"></div>
+      <div class="target-list" id="target-list"></div>
+      <button class="rank-table-btn" id="open-rank-btn" disabled>Open Comparison Table (0)</button>
+    </div>
+  </div>
+
+  <!-- Ranking modal -->
+  <div class="rank-modal" id="rank-modal">
+    <div class="rank-modal-box">
+      <div class="rank-modal-header">
+        <div>
+          <h3>Target vs. AMP Portfolio &mdash; Composite Opportunity Ranking</h3>
+          <div class="sub" id="rank-subtitle">-</div>
+        </div>
+        <button class="rank-modal-close" id="rank-modal-close">&times;</button>
+      </div>
+      <div class="rank-controls">
+        <div class="rank-control-group">
+          <span>Data source:</span>
+          <div class="rank-source-toggle" id="rank-source-toggle">
+            <button class="rank-source-btn active" data-source="census">Census / Allergan</button>
+            <button class="rank-source-btn" data-source="buxton">Buxton</button>
+          </div>
+        </div>
+        <div class="rank-control-group" style="align-items:flex-start;">
+          <span style="padding-top:4px;">Brands:</span>
+          <div class="rank-multi">
+            <div class="rank-multi-actions">
+              <button class="loc-mini-btn" data-rank-group="brands" data-rank-action="all">Select All</button>
+              <button class="loc-mini-btn" data-rank-group="brands" data-rank-action="none">Clear</button>
+              <span class="rank-multi-count" id="rank-brands-count">0 / 0</span>
+            </div>
+            <div class="rank-multi-list" id="rank-brand-list"></div>
+          </div>
+        </div>
+        <div class="rank-control-group" style="align-items:flex-start;">
+          <span style="padding-top:4px;">Classifications:</span>
+          <div class="rank-multi">
+            <div class="rank-multi-actions">
+              <button class="loc-mini-btn" data-rank-group="classes" data-rank-action="all">Select All</button>
+              <button class="loc-mini-btn" data-rank-group="classes" data-rank-action="none">Clear</button>
+              <span class="rank-multi-count" id="rank-classes-count">0 / 0</span>
+            </div>
+            <div class="rank-multi-list" id="rank-class-list"></div>
+          </div>
+        </div>
+        <div class="rank-control-group" style="margin-left:auto;">
+          <button class="target-action-btn secondary" id="rank-reset-filters">Reset Filters</button>
+        </div>
+      </div>
+      <div class="rank-table-wrap" id="rank-table-wrap">
+        <table class="rank-table" id="rank-table"></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend" id="legend">
+    <h4 id="legend-title">Opportunity Score</h4>
+    <div class="legend-items" id="legend-items"></div>
+    <div class="subtitle" id="legend-subtitle">High female pop (HHI $75k+) / Low MedSpa competition</div>
+  </div>
+
+  <div class="info-panel" id="info-panel">
+    <div class="info-header">
+      <div>
+        <h3 id="info-title">-</h3>
+        <div class="subtitle" id="info-subtitle">-</div>
+      </div>
+      <button class="info-close" id="info-close">&times;</button>
+    </div>
+    <div class="info-body" id="info-body"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
