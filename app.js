@@ -530,14 +530,14 @@ function initMap(stateGeo) {
   // Interactive state layer with SVG (for state-level zoom hover)
   stateLayer = L.geoJSON(stateGeo, {
     renderer: L.svg(),
-    style: { color: '#475569', weight: 2, fillOpacity: 0 },
+    style: { color: '#ffffff', weight: 2.5, fillOpacity: 0 },
     onEachFeature: onEachState,
   }).addTo(map);
 
   // Non-interactive state borders (shown at county/ZIP zoom for visual reference)
   stateBorderLayer = L.geoJSON(stateGeo, {
     pane: 'labelsPane',  // in the non-interactive labels pane
-    style: { color: '#475569', weight: 2, fillOpacity: 0, interactive: false },
+    style: { color: '#ffffff', weight: 2.5, fillOpacity: 0, interactive: false },
     interactive: false,
   });
 
@@ -571,7 +571,7 @@ function countyStyle(feature) {
   const val = data ? scale.getVal(data) : 0;
   return {
     fillColor: getColor(val, breaks, scale.colors),
-    weight: 0.5, color: '#334155', fillOpacity: 0.75,
+    weight: 0.7, color: '#ffffff', opacity: 0.6, fillOpacity: 0.75,
   };
 }
 
@@ -617,7 +617,7 @@ function onEachState(feature, layer) {
     },
     mousemove: (e) => moveHoverTip(e),
     mouseout: (e) => {
-      e.target.setStyle({ weight: 2, color: '#475569' });
+      e.target.setStyle({ weight: 2.5, color: '#ffffff' });
       hideHoverTip();
     },
     click: (e) => {
@@ -763,6 +763,22 @@ function updateLegend() {
   }
 }
 
+// Count ZIPs with high (★★★★) and very high (★★★★★) opportunity scores within a region
+function countHighOppZips(level, stateName, countyName) {
+  const zb = colorScales.opportunity.getBreaks('zip');
+  let high = 0, veryHigh = 0;
+  for (const zip of Object.keys(zipData)) {
+    const z = zipData[zip];
+    const o = z.opp || 0;
+    if (o < zb[3]) continue;
+    if (z.s !== stateName) continue;
+    if (level === 'county' && z.c !== countyName) continue;
+    if (o >= zb[4]) veryHigh++;
+    else high++;
+  }
+  return { high, veryHigh };
+}
+
 // ─── Info Panel ──────────────────────────────────────
 function showInfoPanel(title, subtitle, data, level) {
   const panel = document.getElementById('info-panel');
@@ -897,6 +913,10 @@ function showInfoPanel(title, subtitle, data, level) {
         <div class="info-stat"><div class="label">Total Population</div><div class="value">${fmt(data.tp)}</div></div>
         ${data.den ? `<div class="info-stat"><div class="label">Pop Density (target/sq mi)</div><div class="value">${Math.round(data.den).toLocaleString()}</div></div>` : ''}
         ${data.area ? `<div class="info-stat"><div class="label">Area (sq mi)</div><div class="value">${Math.round(data.area).toLocaleString()}</div></div>` : ''}
+        ${level !== 'zip' ? (() => {
+          const z = countHighOppZips(level, data.s, data.c);
+          return `<div class="info-stat"><div class="label">High + Very High Opp ZIPs (&#9733;&#9733;&#9733;&#9733;+)</div><div class="value good">${(z.high + z.veryHigh).toLocaleString()}</div></div>`;
+        })() : ''}
       </div>
     </div>
 
