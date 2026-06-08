@@ -640,7 +640,7 @@
     </div>
     <button class="target-btn" id="target-toggle-btn" title="Target properties benchmark mode"><span>&#127919;</span> Targets</button>
     <div class="metric-selector">
-      <button class="metric-btn active" data-metric="opportunity">Opportunity Score</button>
+      <button class="metric-btn active" data-metric="opportunity">Pop / MedSpa</button>
       <button class="metric-btn" data-metric="registeredPatients">Registered Patients</button>
       <button class="metric-btn" data-metric="medspas">MedSpas</button>
       <button class="metric-btn" data-metric="femalePop">Female Pop 25-65 (75k+)</button>
@@ -717,6 +717,13 @@
             <button class="rank-source-btn" data-source="buxton">Buxton</button>
           </div>
         </div>
+        <div class="rank-control-group">
+          <span>Breakdown:</span>
+          <div class="rank-source-toggle" id="rank-breakdown-toggle">
+            <button class="rank-source-btn active" data-breakdown="zip">ZIP Code</button>
+            <button class="rank-source-btn" data-breakdown="county">County</button>
+          </div>
+        </div>
         <div class="rank-control-group" style="align-items:flex-start;">
           <span style="padding-top:4px;">Brands:</span>
           <div class="rank-multi">
@@ -739,8 +746,12 @@
             <div class="rank-multi-list" id="rank-class-list"></div>
           </div>
         </div>
-        <div class="rank-control-group" style="margin-left:auto;">
-          <button class="target-action-btn secondary" id="rank-reset-filters">Reset Filters</button>
+        <div class="rank-control-group" style="margin-left:auto; gap:6px;">
+          <span>Export:</span>
+          <button class="target-action-btn secondary" id="rank-export-csv">CSV</button>
+          <button class="target-action-btn secondary" id="rank-export-xlsx">XLSX</button>
+          <button class="target-action-btn secondary" id="rank-export-pdf">PDF</button>
+          <button class="target-action-btn secondary" id="rank-reset-filters" style="margin-left:8px;">Reset Filters</button>
         </div>
       </div>
       <div class="rank-table-wrap" id="rank-table-wrap">
@@ -750,7 +761,7 @@
   </div>
 
   <div class="legend" id="legend">
-    <h4 id="legend-title">Opportunity Score</h4>
+    <h4 id="legend-title">Pop / MedSpa</h4>
     <div class="legend-items" id="legend-items"></div>
     <div class="subtitle" id="legend-subtitle">High female pop (HHI $75k+) / Low MedSpa competition</div>
   </div>
@@ -768,6 +779,9 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

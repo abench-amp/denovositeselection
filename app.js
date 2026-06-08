@@ -36,8 +36,8 @@ function hideHoverTip() {
 // ─── Color Scales ────────────────────────────────────
 const colorScales = {
   opportunity: {
-    title: 'Opportunity Score',
-    subtitle: 'Potential patients per MedSpa, boosted in dense areas',
+    title: 'Pop / MedSpa',
+    subtitle: 'Target female pop (HHI $75k+) ÷ MedSpas in area',
     colors: ['#1e293b', '#7f1d1d', '#b91c1c', '#f59e0b', '#22c55e', '#15803d'],
     labels: ['No Data', '\u2605 Very Low', '\u2605\u2605 Low', '\u2605\u2605\u2605 Medium', '\u2605\u2605\u2605\u2605 High', '\u2605\u2605\u2605\u2605\u2605 Very High'],
     getVal: d => d.opp || 0,
@@ -256,11 +256,12 @@ async function loadData() {
   }
   console.log(`Matched ${matched}/${countyGeo.features.length} counties to data`);
 
-  // ── Recompute opportunity scores with density weighting ──
-  // Formula: base = targetPop / medspas (or targetPop * 10 if 0 medspas)
-  // density factor = log2(1 + density) / log2(1 + medianDensity)
-  //   → areas denser than median get a boost, sparse areas get penalized
-  // final opp = base * densityFactor, converted to 0-100 percentile
+  // ── Compute Pop / MedSpa score ──
+  // score = target population (Female 25-65, HHI $75k+) / MedSpas in area
+  //   - ms > 0  → pop / ms
+  //   - ms == 0 → pop * 1 (no competition: score = core population)
+  //   - ms missing in source → impute via portfolio median pop-per-medspa
+  // No density weighting — the raw ratio is the score.
 
   // 1. Compute density for counties (already have area from GeoJSON)
   for (const key of Object.keys(countyData)) {
@@ -290,15 +291,14 @@ async function loadData() {
     .sort((a, b) => a - b);
   const medianPopPerMs = popPerMsRatios[Math.floor(popPerMsRatios.length / 2)] || 1500;
 
-  // 4. Recompute opportunity scores with density weighting
+  // 4. Compute Pop / MedSpa score (target population ÷ MedSpas)
   function computeOpp(d) {
     const pop = d.f7 || 0;
-    const den = d.den || 0;
     if (pop === 0) return 0;
 
     // Distinguish NULL/undefined ms (data gap) from 0 (genuinely no competition).
     //  - If ms is a positive number: base = pop / ms (direct)
-    //  - If ms === 0: true "no competition" → 10x bonus (unchanged, historical intent)
+    //  - If ms === 0: true "no competition" → base = pop (core population, no division)
     //  - If ms is null/undefined: IMPUTE an estimate using portfolio median pop-per-medspa,
     //    capped at min 1 to avoid divide-by-zero. This gives data-gap ZIPs a
     //    realistic, not inflated, score.
@@ -306,7 +306,7 @@ async function loadData() {
     if (typeof d.ms === 'number' && d.ms > 0) {
       base = pop / d.ms;
     } else if (d.ms === 0) {
-      base = pop * 10;
+      base = pop * 1;
     } else {
       // ms is null/undefined — impute
       const imputedMs = Math.max(1, Math.round(pop / medianPopPerMs));
@@ -314,12 +314,7 @@ async function loadData() {
       d.ms_imputed = imputedMs; // mark so UI can flag if needed
     }
 
-    // Density factor: log scale, normalized to median
-    // Dense areas (den >> median) → factor > 1 (boosted)
-    // Sparse areas (den << median) → factor < 1 (penalized)
-    const densityFactor = Math.log2(1 + den) / Math.log2(1 + medianDensity);
-
-    return Math.round(base * Math.max(densityFactor, 0.1));
+    return Math.round(base);
   }
 
   for (const key of Object.keys(countyData)) {
@@ -813,8 +808,8 @@ function showInfoPanel(title, subtitle, data, level) {
     const filled = '\u2605'.repeat(starCount);
     const empty = '<span style="opacity:0.25">' + '\u2605'.repeat(5 - starCount) + '</span>';
     oppStars = filled + empty;
-    const starLabels = ['Very Low Opportunity', 'Low Opportunity', 'Medium Opportunity', 'High Opportunity', 'Very High Opportunity'];
-    oppLabel = starLabels[starCount - 1];
+    const starLabels = ['Very Low', 'Low', 'Medium', 'High', 'Very High'];
+    oppLabel = starLabels[starCount - 1] + ' (Pop / MedSpa)';
   }
 
   // Build human-readable explanation
@@ -831,15 +826,11 @@ function showInfoPanel(title, subtitle, data, level) {
     }
   } else {
     if (popPerMs !== null) {
-      oppExplain = `${popPerMs.toLocaleString()} potential patients per MedSpa`;
+      oppExplain = `${pop.toLocaleString()} target pop ÷ ${ms.toLocaleString()} MedSpa${ms === 1 ? '' : 's'} = ${popPerMs.toLocaleString()}`;
     } else if (pop > 0) {
-      oppExplain = `${pop.toLocaleString()} potential patients, no MedSpas`;
+      oppExplain = `${pop.toLocaleString()} target pop, no MedSpas`;
     } else {
       oppExplain = 'No target population data';
-    }
-    if (den > 0) {
-      const denLabel = den >= 200 ? 'dense urban' : den >= 50 ? 'urban' : den >= 10 ? 'suburban' : 'rural';
-      oppExplain += ` (${denLabel} area)`;
     }
   }
 
@@ -910,12 +901,13 @@ function showInfoPanel(title, subtitle, data, level) {
         <div class="info-stat"><div class="label">Registered Patients</div><div class="value highlight">${fmt(data.rp)}</div></div>
         <div class="info-stat"><div class="label">MedSpas</div><div class="value">${fmt(data.ms)}</div></div>
         <div class="info-stat"><div class="label">Female 25-65 ($75k+)</div><div class="value good">${fmt(data.f7)}</div></div>
+        <div class="info-stat"><div class="label">Pop / MedSpa</div><div class="value highlight">${fmt(data.opp)}</div></div>
         <div class="info-stat"><div class="label">Total Population</div><div class="value">${fmt(data.tp)}</div></div>
         ${data.den ? `<div class="info-stat"><div class="label">Pop Density (target/sq mi)</div><div class="value">${Math.round(data.den).toLocaleString()}</div></div>` : ''}
         ${data.area ? `<div class="info-stat"><div class="label">Area (sq mi)</div><div class="value">${Math.round(data.area).toLocaleString()}</div></div>` : ''}
         ${level !== 'zip' ? (() => {
           const z = countHighOppZips(level, data.s, data.c);
-          return `<div class="info-stat"><div class="label">High + Very High Opp ZIPs (&#9733;&#9733;&#9733;&#9733;+)</div><div class="value good">${(z.high + z.veryHigh).toLocaleString()}</div></div>`;
+          return `<div class="info-stat"><div class="label">High + Very High ZIPs (&#9733;&#9733;&#9733;&#9733;+)</div><div class="value good">${(z.high + z.veryHigh).toLocaleString()}</div></div>`;
         })() : ''}
       </div>
     </div>
@@ -1345,9 +1337,73 @@ const targetProperties = [];
 let targetLayer = null;
 let dropModeOn = false;
 let rankSource = 'census';
+let rankBreakdown = 'zip'; // 'zip' | 'county'
 let rankSort = { col: 'compositeRank', dir: 'asc' };
+// Snapshot of what the table last rendered, for exports
+let lastRankCols = null, lastRankEnriched = null, lastRankTotal = 0;
 const rankBrandFilter = new Set();
 const rankClassFilter = new Set();
+
+// ─── Point-in-polygon (map a property's lat/lng → its county) ──
+function _ringContains(lng, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    const intersect = ((yi > lat) !== (yj > lat)) &&
+      (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function _featureContains(lat, lng, feature) {
+  const g = feature.geometry;
+  if (!g) return false;
+  const polys = g.type === 'Polygon' ? [g.coordinates]
+    : g.type === 'MultiPolygon' ? g.coordinates : [];
+  for (const poly of polys) {
+    if (!poly.length) continue;
+    if (!_ringContains(lng, lat, poly[0])) continue; // outer ring
+    let inHole = false;
+    for (let k = 1; k < poly.length; k++) {
+      if (_ringContains(lng, lat, poly[k])) { inHole = true; break; }
+    }
+    if (!inHole) return true;
+  }
+  return false;
+}
+
+function _featureBBox(f) {
+  if (f._bbox !== undefined) return f._bbox;
+  const g = f.geometry;
+  if (!g) { f._bbox = null; return null; }
+  const polys = g.type === 'Polygon' ? [g.coordinates]
+    : g.type === 'MultiPolygon' ? g.coordinates : [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const poly of polys) for (const ring of poly) for (const pt of ring) {
+    if (pt[0] < minX) minX = pt[0];
+    if (pt[0] > maxX) maxX = pt[0];
+    if (pt[1] < minY) minY = pt[1];
+    if (pt[1] > maxY) maxY = pt[1];
+  }
+  f._bbox = (minX === Infinity) ? null : [minX, minY, maxX, maxY];
+  return f._bbox;
+}
+
+const _countyFeatCache = new Map();
+function findCountyFeature(lat, lng) {
+  if (lat == null || lng == null || !countyGeo) return null;
+  const key = lat.toFixed(4) + ',' + lng.toFixed(4);
+  if (_countyFeatCache.has(key)) return _countyFeatCache.get(key);
+  let found = null;
+  for (const f of countyGeo.features) {
+    const bb = _featureBBox(f);
+    if (!bb || lng < bb[0] || lng > bb[2] || lat < bb[1] || lat > bb[3]) continue;
+    if (_featureContains(lat, lng, f)) { found = f; break; }
+  }
+  _countyFeatCache.set(key, found);
+  return found;
+}
 
 function makeTargetIcon() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 30 38">
@@ -1476,7 +1532,7 @@ function renderTargets() {
         <div class="tt-title">&#127919; ${t.name}</div>
         <div class="tt-row"><span class="tt-label">Type</span><span class="tt-value">Target</span></div>
         ${t.zip ? `<div class="tt-row"><span class="tt-label">ZIP</span><span class="tt-value">${t.zip}</span></div>` : ''}
-        ${z?.opp ? `<div class="tt-row"><span class="tt-label">Opp Score</span><span class="tt-value">${z.opp.toLocaleString()}</span></div>` : ''}`;
+        ${z?.opp ? `<div class="tt-row"><span class="tt-label">Pop / MedSpa</span><span class="tt-value">${z.opp.toLocaleString()}</span></div>` : ''}`;
       showHoverTip({ originalEvent: e.originalEvent }, html);
     });
     marker.on('mousemove', (e) => moveHoverTip({ originalEvent: e.originalEvent }));
@@ -1590,10 +1646,18 @@ function buildPropertyRows() {
       lng: t.lng,
     });
   }
-  // Attach ZIP-keyed census + buxton data
+  // Attach data per the selected breakdown: ZIP-level or containing-county-level
   for (const r of rows) {
-    r.census = getPropertyData(r.zip, 'census');
-    r.buxton = getPropertyData(r.zip, 'buxton');
+    if (rankBreakdown === 'county') {
+      const f = findCountyFeature(r.lat, r.lng);
+      r.census = f ? (f.properties.data || null) : null;
+      r.buxton = f ? (f.properties.buxtonData || null) : null;
+      r.countyName = f ? (f.properties.name || (r.census && r.census.c) || '') : '';
+    } else {
+      r.census = getPropertyData(r.zip, 'census');
+      r.buxton = getPropertyData(r.zip, 'buxton');
+      r.countyName = '';
+    }
   }
   return rows;
 }
@@ -1705,6 +1769,11 @@ function fmtNum(v, isPct) {
   return v;
 }
 
+function fmtMoney(v) {
+  if (v == null || v === '') return '—';
+  return '$' + Math.round(v).toLocaleString();
+}
+
 function renderRankTable() {
   const allRows = buildPropertyRows();
 
@@ -1736,6 +1805,9 @@ function renderRankTable() {
       ms: d.ms || 0,
       pop: pop || 0,
       penetration,
+      tp: d.tp || 0,
+      mi: (d.mi != null ? d.mi : null),
+      ai: (d.ai != null ? d.ai : null),
       compositeRank: ranks.get(r.id) ?? null,
     };
   });
@@ -1762,20 +1834,24 @@ function renderRankTable() {
     { key: 'city',          label: 'City',            width: 120 },
     { key: 'state',         label: 'ST',              width: 45 },
     { key: 'zip',           label: 'ZIP',             width: 60 },
-    ...(!isBuxton ? [{ key: 'opp', label: 'Opp Score', width: 100 }] : []),
+    ...(rankBreakdown === 'county' ? [{ key: 'countyName', label: 'County', width: 130 }] : []),
+    ...(!isBuxton ? [{ key: 'opp', label: 'Pop / MedSpa', width: 110 }] : []),
     { key: 'pop',           label: popLabel,          width: 130 },
     ...(!isBuxton ? [
       { key: 'ms',          label: 'MedSpas',         width: 80 },
       { key: 'rp',          label: 'Reg. Patients',   width: 100 },
       { key: 'penetration', label: 'Penetration',     width: 95 },
     ] : []),
+    { key: 'tp',            label: 'Total Pop',       width: 110 },
+    { key: 'mi',            label: 'Median HH Income', width: 140 },
+    { key: 'ai',            label: 'Avg HH Income',   width: 130 },
   ];
 
   const targetCount = enriched.filter(r => r.kind === 'target').length;
   const ampCount = enriched.length - targetCount;
 
   document.getElementById('rank-subtitle').textContent =
-    `${targetCount} target${targetCount === 1 ? '' : 's'} vs. ${ampCount} AMP location${ampCount === 1 ? '' : 's'} \u2014 ranked against ${total} total properties using ${rankSource === 'buxton' ? 'Buxton' : 'Census/Allergan'} data`;
+    `${targetCount} target${targetCount === 1 ? '' : 's'} vs. ${ampCount} AMP location${ampCount === 1 ? '' : 's'} \u2014 ranked against ${total} total properties using ${rankSource === 'buxton' ? 'Buxton' : 'Census/Allergan'} data, broken down by ${rankBreakdown === 'county' ? 'county' : 'ZIP code'}`;
 
   const table = document.getElementById('rank-table');
   const thead = '<thead><tr>' + cols.map(c => {
@@ -1805,13 +1881,22 @@ function renderRankTable() {
         <td>${r.city || '—'}</td>
         <td>${r.state || '—'}</td>
         <td>${r.zip || '—'}</td>
+        ${rankBreakdown === 'county' ? `<td>${r.countyName || '—'}</td>` : ''}
         ${censusCells}
         <td>${fmtNum(r.pop)}</td>
         ${extraCensusCells}
+        <td>${fmtNum(r.tp)}</td>
+        <td>${fmtMoney(r.mi)}</td>
+        <td>${fmtMoney(r.ai)}</td>
       </tr>`;
     }).join('')) + '</tbody>';
 
   table.innerHTML = thead + tbody;
+
+  // Snapshot for export (matches current filters/sort/source/breakdown)
+  lastRankCols = cols;
+  lastRankEnriched = enriched;
+  lastRankTotal = total;
 
   // Header click → sort
   table.querySelectorAll('th[data-col]').forEach(th => {
@@ -1821,21 +1906,110 @@ function renderRankTable() {
         rankSort.dir = rankSort.dir === 'asc' ? 'desc' : 'asc';
       } else {
         rankSort.col = col;
-        rankSort.dir = (col === 'opp' || col === 'pop' || col === 'rp' || col === 'ms' || col === 'penetration') ? 'desc' : 'asc';
+        rankSort.dir = ['opp', 'pop', 'rp', 'ms', 'penetration', 'tp', 'mi', 'ai'].includes(col) ? 'desc' : 'asc';
       }
       renderRankTable();
     });
   });
 }
 
+// ─── Ranking Table Export ────────────────────────────
+function _exportCell(r, key, total) {
+  switch (key) {
+    case 'compositeRank': return r.compositeRank ? `${r.compositeRank} / ${total}` : '';
+    case 'kind':          return r.kind === 'target' ? 'Target' : 'AMP';
+    case 'penetration':   return (r.penetration == null) ? '' : +r.penetration.toFixed(1);
+    case 'opp': case 'pop': case 'ms': case 'rp': case 'tp': case 'mi': case 'ai': {
+      const v = r[key]; return (v == null) ? '' : v;
+    }
+    default: {
+      const v = r[key]; return (v == null || v === '') ? '' : v;
+    }
+  }
+}
+
+function buildRankExport() {
+  const cols = lastRankCols || [];
+  const total = lastRankTotal || 0;
+  const headers = cols.map(c => c.label);
+  const rows = (lastRankEnriched || []).map(r => cols.map(c => _exportCell(r, c.key, total)));
+  return { headers, rows };
+}
+
+function rankExportFilename(ext) {
+  const d = new Date().toISOString().slice(0, 10);
+  return `amp-ranking-${rankSource}-${rankBreakdown}-${d}.${ext}`;
+}
+
+function _downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportRankCSV() {
+  const { headers, rows } = buildRankExport();
+  const esc = v => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const csv = [headers, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
+  _downloadBlob(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }), rankExportFilename('csv'));
+}
+
+function exportRankXLSX() {
+  if (typeof XLSX === 'undefined') { alert('Spreadsheet library still loading — try again in a moment.'); return; }
+  const { headers, rows } = buildRankExport();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(10, String(h).length + 2) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ranking');
+  XLSX.writeFile(wb, rankExportFilename('xlsx'));
+}
+
+function exportRankPDF() {
+  if (!window.jspdf || !window.jspdf.jsPDF) { alert('PDF library still loading — try again in a moment.'); return; }
+  const { headers, rows } = buildRankExport();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  doc.setFontSize(13);
+  doc.text('Target vs. AMP Portfolio — Composite Opportunity Ranking', 40, 36);
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text(document.getElementById('rank-subtitle').textContent || '', 40, 52);
+  doc.autoTable({
+    head: [headers],
+    body: rows.map(r => r.map(v => v === '' ? '' : String(v))),
+    startY: 64,
+    styles: { fontSize: 7, cellPadding: 3, overflow: 'linebreak' },
+    headStyles: { fillColor: [4, 30, 66], textColor: 255 },
+    alternateRowStyles: { fillColor: [245, 242, 235] },
+    margin: { left: 40, right: 40 },
+  });
+  doc.save(rankExportFilename('pdf'));
+}
+
 function initRankModal() {
   document.getElementById('rank-modal-close').addEventListener('click', () => {
     document.getElementById('rank-modal').classList.remove('visible');
   });
+  document.getElementById('rank-export-csv').addEventListener('click', exportRankCSV);
+  document.getElementById('rank-export-xlsx').addEventListener('click', exportRankXLSX);
+  document.getElementById('rank-export-pdf').addEventListener('click', exportRankPDF);
   document.querySelectorAll('#rank-source-toggle .rank-source-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       rankSource = btn.dataset.source;
       document.querySelectorAll('#rank-source-toggle .rank-source-btn').forEach(b =>
+        b.classList.toggle('active', b === btn));
+      renderRankTable();
+    });
+  });
+  document.querySelectorAll('#rank-breakdown-toggle .rank-source-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      rankBreakdown = btn.dataset.breakdown;
+      document.querySelectorAll('#rank-breakdown-toggle .rank-source-btn').forEach(b =>
         b.classList.toggle('active', b === btn));
       renderRankTable();
     });
